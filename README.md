@@ -133,7 +133,7 @@ Then press **F5** to launch. Use **Ctrl+Shift+F5** to restart after changes.
 
 ## Contributing
 
-Contributions are welcome! Please see our [contributing guidelines](CONTRIBUTING.md).
+Contributions are welcome! Please open an issue or submit a pull request on [GitHub](https://github.com/franciszver/claude-humanlayer-extension).
 
 ## License
 
@@ -141,5 +141,5 @@ MIT
 
 ## Links
 
-- [HumanLayer Repository](https://github.com/humanlayer/humanlayer)
-- [Report Issues](https://github.com/humanlayer/humanlayer-command-syncer/issues)
+- [HumanLayer Command Packs Repository](https://github.com/humanlayer/humanlayer)
+- [Report Issues](https://github.com/franciszver/claude-humanlayer-extension/issues)

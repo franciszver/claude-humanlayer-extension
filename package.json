@@ -5,16 +5,20 @@
   "version": "0.1.0",
   "publisher": "humanlayer",
   "license": "MIT",
+  "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/humanlayer/humanlayer-command-syncer"
+    "url": "https://github.com/franciszver/claude-humanlayer-extension"
   },
+  "bugs": {
+    "url": "https://github.com/franciszver/claude-humanlayer-extension/issues"
+  },
+  "homepage": "https://github.com/franciszver/claude-humanlayer-extension#readme",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other",
-    "Snippets"
+    "Other"
   ],
   "keywords": [
     "claude",
@@ -23,6 +27,12 @@
     "ai-tools",
     "workflow"
   ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "qna": "marketplace",
+  "preview": true,
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -75,7 +85,11 @@
         "humanlayer.defaultProfile": {
           "type": "string",
           "default": "full",
-          "enum": ["minimal", "full", "custom"],
+          "enum": [
+            "minimal",
+            "full",
+            "custom"
+          ],
           "description": "Default profile to use when installing commands"
         },
         "humanlayer.autoAddGitignore": {
@@ -105,6 +119,8 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^8.50.1",
+    "@typescript-eslint/parser": "^8.50.1",
     "@vscode/vsce": "^2.22.0",
     "esbuild": "^0.19.8",
     "eslint": "^8.55.0",
