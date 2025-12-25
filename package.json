@@ -1,7 +1,7 @@
 {
   "name": "humanlayer-command-syncer",
   "displayName": "HumanLayer Command Syncer",
-  "description": "Automatically fetch, install, and update HumanLayer Claude Code command packs from GitHub",
+  "description": "Automatically fetch, install, and update HumanLayer Claude Code command packs from GitHub (for Claude Code users on Windows)",
   "version": "0.1.0",
   "publisher": "humanlayer",
   "license": "MIT",
@@ -101,6 +101,19 @@
           "type": "string",
           "default": "latest",
           "description": "Default tag to use (use 'latest' for most recent)"
+        },
+        "humanlayer.installLocation": {
+          "type": "string",
+          "default": "workspace",
+          "enum": [
+            "workspace",
+            "user"
+          ],
+          "enumDescriptions": [
+            "Install commands to workspace .claude/commands directory (project-specific)",
+            "Install commands to user-level ~/.claude/commands directory (global, available in all workspaces)"
+          ],
+          "description": "Where to install command packs"
         }
       }
     }
@@ -110,12 +123,14 @@
     "compile": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
     "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --watch",
     "lint": "eslint src --ext ts",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "package": "vsce package",
     "publish": "vsce publish"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
@@ -124,8 +139,9 @@
     "@vscode/vsce": "^2.22.0",
     "esbuild": "^0.19.8",
     "eslint": "^8.55.0",
-    "typescript": "^5.3.2",
-    "vitest": "^1.1.0"
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.3.2"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

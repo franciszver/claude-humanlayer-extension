@@ -129,7 +129,7 @@ export class LockfileManager {
         }
 
         // Check for removed commands
-        for (const [name, _] of localMap) {
+        for (const [name] of localMap) {
             if (!remoteMap.has(name)) {
                 removed.push(name);
             }

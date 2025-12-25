@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as os from 'os';
+import * as path from 'path';
 import type { CommandFile } from '../github/types';
 import type { InstallResult } from './types';
 import { LockfileManager } from '../lockfile';
@@ -8,6 +10,8 @@ import { addToGitignore } from './gitignore';
 const COMMANDS_DIR = '.claude/commands';
 const HUMANLAYER_DIR = '.claude/commands/humanlayer';
 
+export type InstallLocation = 'workspace' | 'user';
+
 export class CommandInstaller {
     private lockfileManager: LockfileManager;
 
@@ -15,11 +19,28 @@ export class CommandInstaller {
         this.lockfileManager = lockfileManager;
     }
 
+    private getUserLevelUri(): vscode.Uri {
+        const homeDir = os.homedir();
+        const claudeDir = path.join(homeDir, '.claude');
+        return vscode.Uri.file(claudeDir);
+    }
+
+    private getInstallUri(workspaceUri: vscode.Uri | undefined, location: InstallLocation): vscode.Uri {
+        if (location === 'user') {
+            return this.getUserLevelUri();
+        }
+        if (!workspaceUri) {
+            throw new Error('Workspace URI required for workspace installation');
+        }
+        return workspaceUri;
+    }
+
     async install(
-        workspaceUri: vscode.Uri,
+        workspaceUri: vscode.Uri | undefined,
         commands: CommandFile[],
         tag: string,
-        profile: string
+        profile: string,
+        location?: InstallLocation
     ): Promise<InstallResult> {
         const result: InstallResult = {
             success: true,
@@ -29,13 +50,17 @@ export class CommandInstaller {
         };
 
         try {
+            // Get installation location from config if not specified
+            const installLocation: InstallLocation = location || (vscode.workspace.getConfiguration('humanlayer').get<InstallLocation>('installLocation', 'workspace') ?? 'workspace');
+            const installUri = this.getInstallUri(workspaceUri, installLocation);
+
             // Ensure directories exist
-            await this.ensureDirectories(workspaceUri);
+            await this.ensureDirectories(installUri);
 
             // Install each command
             for (const command of commands) {
                 try {
-                    await this.installCommand(workspaceUri, command);
+                    await this.installCommand(installUri, command);
                     result.installedCount++;
                 } catch (error) {
                     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -44,16 +69,19 @@ export class CommandInstaller {
                 }
             }
 
-            // Update .gitignore if setting is enabled
-            const config = vscode.workspace.getConfiguration('humanlayer');
-            if (config.get('autoAddGitignore', true)) {
-                await addToGitignore(workspaceUri);
+            // Update .gitignore only for workspace installations
+            if (installLocation === 'workspace' && workspaceUri) {
+                const config = vscode.workspace.getConfiguration('humanlayer');
+                if (config.get('autoAddGitignore', true)) {
+                    await addToGitignore(workspaceUri);
+                }
             }
 
             // Write lockfile
-            await this.lockfileManager.write(workspaceUri, {
+            await this.lockfileManager.write(installUri, {
                 tag,
                 profile,
+                location: installLocation,
                 commands: commands.map(cmd => ({
                     name: cmd.name,
                     path: cmd.path,
@@ -89,16 +117,16 @@ export class CommandInstaller {
         }
     }
 
-    private async installCommand(workspaceUri: vscode.Uri, command: CommandFile): Promise<void> {
+    private async installCommand(installUri: vscode.Uri, command: CommandFile): Promise<void> {
         // Determine the file name from the path
         const fileName = command.path.split('/').pop() || `${command.name}.md`;
-        const targetPath = vscode.Uri.joinPath(workspaceUri, HUMANLAYER_DIR, fileName);
+        const targetPath = vscode.Uri.joinPath(installUri, HUMANLAYER_DIR, fileName);
 
         // Check if file already exists and is user-modified
         const existingContent = await this.readExistingFile(targetPath);
         if (existingContent !== null) {
             const existingHash = this.hashContent(existingContent);
-            const lockfile = await this.lockfileManager.read(workspaceUri);
+            const lockfile = await this.lockfileManager.read(installUri);
 
             if (lockfile) {
                 const lockedCommand = lockfile.commands.find(c => c.name === command.name);
@@ -129,8 +157,10 @@ export class CommandInstaller {
         return crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
     }
 
-    async uninstall(workspaceUri: vscode.Uri): Promise<void> {
-        const humanLayerDir = vscode.Uri.joinPath(workspaceUri, HUMANLAYER_DIR);
+    async uninstall(workspaceUri: vscode.Uri | undefined, location?: InstallLocation): Promise<void> {
+        const installLocation: InstallLocation = location || (vscode.workspace.getConfiguration('humanlayer').get<InstallLocation>('installLocation', 'workspace') ?? 'workspace');
+        const installUri = this.getInstallUri(workspaceUri, installLocation);
+        const humanLayerDir = vscode.Uri.joinPath(installUri, HUMANLAYER_DIR);
 
         try {
             await vscode.workspace.fs.delete(humanLayerDir, { recursive: true });
@@ -139,29 +169,33 @@ export class CommandInstaller {
         }
 
         // Remove lockfile
-        await this.lockfileManager.delete(workspaceUri);
+        await this.lockfileManager.delete(installUri);
     }
 
-    async getInstalledCommands(workspaceUri: vscode.Uri): Promise<string[]> {
-        const humanLayerDir = vscode.Uri.joinPath(workspaceUri, HUMANLAYER_DIR);
+    async getInstalledCommands(workspaceUri: vscode.Uri | undefined, location?: InstallLocation): Promise<string[]> {
+        const installLocation: InstallLocation = location || (vscode.workspace.getConfiguration('humanlayer').get<InstallLocation>('installLocation', 'workspace') ?? 'workspace');
+        const installUri = this.getInstallUri(workspaceUri, installLocation);
+        const humanLayerDir = vscode.Uri.joinPath(installUri, HUMANLAYER_DIR);
 
         try {
             const entries = await vscode.workspace.fs.readDirectory(humanLayerDir);
             return entries
-                .filter(([_, type]) => type === vscode.FileType.File)
-                .map(([name, _]) => name)
+                .filter(([, type]) => type === vscode.FileType.File)
+                .map(([name]) => name)
                 .filter(name => !name.endsWith('.disabled'));
         } catch {
             return [];
         }
     }
 
-    async toggleCommand(workspaceUri: vscode.Uri, commandName: string, enabled: boolean): Promise<void> {
-        const humanLayerDir = vscode.Uri.joinPath(workspaceUri, HUMANLAYER_DIR);
+    async toggleCommand(workspaceUri: vscode.Uri | undefined, commandName: string, enabled: boolean, location?: InstallLocation): Promise<void> {
+        const installLocation: InstallLocation = location || (vscode.workspace.getConfiguration('humanlayer').get<InstallLocation>('installLocation', 'workspace') ?? 'workspace');
+        const installUri = this.getInstallUri(workspaceUri, installLocation);
+        const humanLayerDir = vscode.Uri.joinPath(installUri, HUMANLAYER_DIR);
         const entries = await vscode.workspace.fs.readDirectory(humanLayerDir);
 
         // Find the command file - match exact name (with any extension)
-        const commandFile = entries.find(([name, _]) => {
+        const commandFile = entries.find(([name]) => {
             const baseName = name.replace('.disabled', '');
             const nameWithoutExt = baseName.replace(/\.(md|yaml|yml)$/, '');
             return nameWithoutExt === commandName;
@@ -171,7 +205,7 @@ export class CommandInstaller {
             throw new Error(`Command not found: ${commandName}`);
         }
 
-        const [currentName, _] = commandFile;
+        const [currentName] = commandFile;
         const isCurrentlyDisabled = currentName.endsWith('.disabled');
 
         if (enabled && isCurrentlyDisabled) {

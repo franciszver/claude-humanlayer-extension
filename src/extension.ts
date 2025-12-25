@@ -76,9 +76,13 @@ async function installCommands(
     installer: CommandInstaller,
     cache: CacheManager
 ): Promise<void> {
+    const config = vscode.workspace.getConfiguration('humanlayer');
+    const installLocation = config.get('installLocation', 'workspace');
+
+    // Check workspace requirement for workspace-level installation
     const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders) {
-        vscode.window.showErrorMessage('No workspace folder open. Please open a folder first.');
+    if (installLocation === 'workspace' && !workspaceFolders) {
+        vscode.window.showErrorMessage('No workspace folder open. Please open a folder first or change installation location to "user" in settings.');
         return;
     }
 
@@ -136,21 +140,29 @@ async function installCommands(
                     }
                 }
 
-                // Install to each workspace folder
+                // Install commands based on location
                 progress.report({ message: 'Installing commands...' });
 
                 const profile = config.get<string>('defaultProfile') || 'full';
 
-                for (const folder of workspaceFolders) {
-                    await installer.install(folder.uri, commands, selectedTag.label, profile);
+                if (installLocation === 'user') {
+                    // Install to user level (global)
+                    await installer.install(undefined, commands, selectedTag.label, profile, 'user');
+                    vscode.window.showInformationMessage(
+                        `Successfully installed ${commands.length} HumanLayer commands to user level (${selectedTag.label})`
+                    );
+                } else {
+                    // Install to each workspace folder
+                    for (const folder of workspaceFolders!) {
+                        await installer.install(folder.uri, commands, selectedTag.label, profile, 'workspace');
+                    }
+                    vscode.window.showInformationMessage(
+                        `Successfully installed ${commands.length} HumanLayer commands to workspace (${selectedTag.label})`
+                    );
                 }
 
                 // Cache the commands
                 await cache.cacheCommands(selectedTag.label, commands);
-
-                vscode.window.showInformationMessage(
-                    `Successfully installed ${commands.length} HumanLayer commands (${selectedTag.label})`
-                );
             }
         );
     } catch (error) {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+// Jest globals are provided automatically
 import { YamlValidator } from '../validator';
 import type { CommandFile } from '../github/types';
 

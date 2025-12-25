@@ -9,6 +9,7 @@ export interface LockfileCommand {
 export interface Lockfile {
     tag: string;
     profile: string;
+    location?: 'workspace' | 'user';
     commands: LockfileCommand[];
     timestamp: string;
 }

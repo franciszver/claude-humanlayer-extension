@@ -2,6 +2,8 @@
 
 A VS Code extension that automatically fetches, installs, and updates HumanLayer's Claude Code command packs directly from the official HumanLayer repository.
 
+> **For Claude Code Users on Windows**: This extension is specifically designed for users running [Claude Code](https://claude.com/claude-code) (Anthropic's official CLI) within VS Code on Windows. It manages command packs for Claude Code's command system.
+
 ## Features
 
 - **One-Click Install**: Fetch and install HumanLayer commands from GitHub with a single click
@@ -13,10 +15,16 @@ A VS Code extension that automatically fetches, installs, and updates HumanLayer
 - **Safe Updates**: Preview changes with VS Code's diff viewer before applying
 - **Git-Friendly**: Automatically adds installed commands to `.gitignore`
 
+## Requirements
+
+- **VS Code** on Windows
+- **[Claude Code](https://claude.com/claude-code)** - Anthropic's official CLI for Claude
+- Claude Code must be configured and working in your VS Code environment
+
 ## Installation
 
-1. Open VS Code
-2. Go to Extensions (Ctrl+Shift+X / Cmd+Shift+X)
+1. Open VS Code on Windows
+2. Go to Extensions (Ctrl+Shift+X)
 3. Search for "HumanLayer Command Syncer"
 4. Click Install
 
@@ -50,23 +58,53 @@ Commands are installed to `.claude/commands/humanlayer/` in your workspace.
 |---------|---------|-------------|
 | `humanlayer.autoUpdate` | `false` | Automatically check for updates on startup |
 | `humanlayer.defaultProfile` | `"full"` | Default profile (minimal/full/custom) |
-| `humanlayer.autoAddGitignore` | `true` | Add installed commands to .gitignore |
+| `humanlayer.autoAddGitignore` | `true` | Add installed commands to .gitignore (workspace only) |
 | `humanlayer.defaultTag` | `"latest"` | Default version tag |
+| `humanlayer.installLocation` | `"workspace"` | Install location: `"workspace"` (project-specific) or `"user"` (global) |
+
+### Installation Locations
+
+**Workspace Installation** (default)
+- Commands installed to `.claude/commands/humanlayer/` in your project
+- Different commands per workspace
+- Perfect for project-specific commands
+- Automatically added to `.gitignore`
+
+**User Installation** (global)
+- Commands installed to `~/.claude/commands/humanlayer/`
+- Available in all workspaces
+- Perfect for commands you use everywhere
+- No workspace required
 
 ## How It Works
 
 1. **Fetches** command packs from the HumanLayer GitHub repository
 2. **Validates** YAML syntax and schema
-3. **Installs** commands to your workspace's `.claude/commands/humanlayer/` directory
+3. **Installs** commands to your chosen location (workspace or user level)
 4. **Creates** a lockfile for reproducible installs
-5. **Updates** `.gitignore` to keep your repo clean
+5. **Updates** `.gitignore` (for workspace installations only)
 
 ## File Structure
+
+### Workspace Installation
 
 After installation, your workspace will have:
 
 ```
 .claude/
+└── commands/
+    └── humanlayer/
+        ├── command1.md
+        ├── command2.yaml
+        └── humanlayer.lock.json
+```
+
+### User Installation
+
+Commands are installed globally to:
+
+```
+~/.claude/
 └── commands/
     └── humanlayer/
         ├── command1.md
