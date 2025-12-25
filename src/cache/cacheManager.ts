@@ -111,7 +111,7 @@ export class CacheManager {
             const entries = await vscode.workspace.fs.readDirectory(commandsDir);
             return entries
                 .filter(([name, type]) => type === vscode.FileType.File && name.endsWith('.json'))
-                .map(([name, _]) => name.replace('.json', ''));
+                .map(([name]) => name.replace('.json', ''));
         } catch {
             return [];
         }

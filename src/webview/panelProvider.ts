@@ -93,7 +93,7 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
                 break;
 
             case 'refresh':
-                await this._refresh();
+                await this._refresh(true); // Force refresh from GitHub
                 break;
 
             case 'clearCache':
@@ -103,12 +103,21 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    private async _refresh(): Promise<void> {
+    private async _refresh(forceRefresh = false): Promise<void> {
         this._sendMessage({ type: 'setLoading', isLoading: true });
 
         try {
             const isOnline = await this._fetcher.isOnline();
-            const tags = await this._fetcher.fetchTags();
+
+            // When offline, only show tags that have cached commands
+            let tags;
+            if (!isOnline) {
+                const cachedTagNames = await this._cache.getCachedTagsList();
+                tags = cachedTagNames.map(name => ({ name, commit: { sha: '', url: '' }, zipball_url: '', tarball_url: '' }));
+            } else {
+                tags = await this._fetcher.fetchTags(forceRefresh);
+            }
+
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 
             let installedCommands: CommandInfo[] = [];

@@ -5,6 +5,58 @@ const GITHUB_API_BASE = 'https://api.github.com';
 const HUMANLAYER_REPO = 'humanlayer/humanlayer';
 const COMMANDS_PATH = '.claude/commands';
 
+/**
+ * Parse a semver string into comparable parts
+ * Returns null if not a valid semver
+ */
+function parseSemver(tag: string): { major: number; minor: number; patch: number } | null {
+    // Remove leading 'v' if present
+    const version = tag.startsWith('v') ? tag.slice(1) : tag;
+    const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+    if (!match) {
+        return null;
+    }
+    return {
+        major: parseInt(match[1], 10),
+        minor: parseInt(match[2], 10),
+        patch: parseInt(match[3], 10)
+    };
+}
+
+/**
+ * Compare two semver versions
+ * Returns positive if a > b, negative if a < b, 0 if equal
+ */
+function compareSemver(a: { major: number; minor: number; patch: number }, b: { major: number; minor: number; patch: number }): number {
+    if (a.major !== b.major) {
+        return a.major - b.major;
+    }
+    if (a.minor !== b.minor) {
+        return a.minor - b.minor;
+    }
+    return a.patch - b.patch;
+}
+
+/**
+ * Find the latest semver tag from a list of tags
+ */
+function getLatestSemverTag(tags: GitHubTag[]): GitHubTag | null {
+    let latest: GitHubTag | null = null;
+    let latestVersion: { major: number; minor: number; patch: number } | null = null;
+
+    for (const tag of tags) {
+        const version = parseSemver(tag.name);
+        if (version) {
+            if (!latestVersion || compareSemver(version, latestVersion) > 0) {
+                latest = tag;
+                latestVersion = version;
+            }
+        }
+    }
+
+    return latest;
+}
+
 export class GitHubFetcher {
     private cache: CacheManager;
     private rateLimitRemaining: number = 60;
@@ -64,9 +116,12 @@ export class GitHubFetcher {
         return error;
     }
 
-    async fetchTags(): Promise<GitHubTag[]> {
-        // Try cache first
+    async fetchTags(forceRefresh = false): Promise<GitHubTag[]> {
+        // Use cache if valid and not forcing refresh
         const cachedTags = await this.cache.getCachedTags();
+        if (!forceRefresh && cachedTags.length > 0) {
+            return cachedTags;
+        }
 
         try {
             const url = `${GITHUB_API_BASE}/repos/${HUMANLAYER_REPO}/tags`;
@@ -75,19 +130,50 @@ export class GitHubFetcher {
             // Cache the tags
             await this.cache.cacheTags(tags);
 
+            // Auto-cache the latest semver version (silently in background)
+            const latestTag = getLatestSemverTag(tags);
+            if (latestTag) {
+                // Check if already cached (with valid TTL)
+                const cachedCommands = await this.cache.getCachedCommands(latestTag.name);
+                if (cachedCommands.length === 0) {
+                    // Fetch and cache in background (don't await, don't block)
+                    // Use forceRefresh=true to ensure we actually fetch
+                    this.fetchCommands(latestTag.name, true).catch(() => {
+                        // Silently ignore errors during background caching
+                    });
+                }
+            }
+
             return tags;
         } catch (error) {
-            // Fall back to cache on network error
-            if ((error as FetchError).isNetworkError && cachedTags.length > 0) {
-                return cachedTags;
+            // Fall back to cached tags that have commands available (for offline mode)
+            if ((error as FetchError).isNetworkError) {
+                const cachedTagNames = await this.cache.getCachedTagsList();
+                if (cachedTagNames.length > 0) {
+                    // Return only tags that have cached commands
+                    const tagsWithCache = cachedTags.filter(t => cachedTagNames.includes(t.name));
+                    if (tagsWithCache.length > 0) {
+                        return tagsWithCache;
+                    }
+                    // If no match in cached tags list, create minimal tag objects from cached tag names
+                    return cachedTagNames.map(name => ({
+                        name,
+                        commit: { sha: '', url: '' },
+                        zipball_url: '',
+                        tarball_url: ''
+                    }));
+                }
             }
             throw error;
         }
     }
 
-    async fetchCommands(tag: string): Promise<CommandFile[]> {
-        // Try cache first
+    async fetchCommands(tag: string, forceRefresh = false): Promise<CommandFile[]> {
+        // Use cache if valid and not forcing refresh
         const cachedCommands = await this.cache.getCachedCommands(tag);
+        if (!forceRefresh && cachedCommands.length > 0) {
+            return cachedCommands;
+        }
 
         try {
             // Get the tree for the tag
@@ -116,6 +202,9 @@ export class GitHubFetcher {
                 });
             }
 
+            // Cache the commands
+            await this.cache.cacheCommands(tag, commands);
+
             return commands;
         } catch (error) {
             // Fall back to cache on network error
@@ -138,11 +227,15 @@ export class GitHubFetcher {
     }
 
     async isOnline(): Promise<boolean> {
+        // Use a lightweight HEAD request to check connectivity without consuming rate limit
         try {
-            await this.fetch<{ rate: { remaining: number } }>(
-                `${GITHUB_API_BASE}/rate_limit`
-            );
-            return true;
+            const response = await globalThis.fetch(`${GITHUB_API_BASE}/zen`, {
+                method: 'HEAD',
+                headers: {
+                    'User-Agent': 'HumanLayer-Command-Syncer'
+                }
+            });
+            return response.ok;
         } catch {
             return false;
         }
