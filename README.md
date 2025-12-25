@@ -86,6 +86,51 @@ When GitHub is unavailable, the extension uses cached commands. A warning is sho
 - VS Code 1.85.0 or higher
 - Internet connection (for initial install and updates)
 
+## Development
+
+### Prerequisites
+
+- Node.js (v18 or later)
+- VS Code 1.85.0 or higher
+
+### Setup
+
+```bash
+npm install
+npm run compile
+```
+
+### Running Locally
+
+1. Open the project in VS Code
+2. Press **F5** to launch the Extension Development Host
+3. The extension will be active in the new VS Code window
+
+Two debug configurations are available:
+- **Run Extension** - Compiles first, then launches
+- **Run Extension (No Build)** - Skips compilation (use with `npm run watch`)
+
+### Watch Mode
+
+For development with automatic recompilation:
+
+```bash
+npm run watch
+```
+
+Then press **F5** to launch. Use **Ctrl+Shift+F5** to restart after changes.
+
+### Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run compile` | Compile TypeScript to JavaScript |
+| `npm run watch` | Watch mode for development |
+| `npm run test` | Run unit tests |
+| `npm run test:watch` | Run tests in watch mode |
+| `npm run lint` | Run ESLint |
+| `npm run package` | Create .vsix package |
+
 ## Contributing
 
 Contributions are welcome! Please see our [contributing guidelines](CONTRIBUTING.md).
