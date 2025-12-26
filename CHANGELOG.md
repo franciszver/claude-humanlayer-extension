@@ -7,14 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-12-25
+
 ### Added
+- Uninstall button to remove all HumanLayer commands from current installation location
+- Install location banner showing whether commands are installed at workspace or user level
 - User-level (global) installation support - install commands to `~/.claude/commands/humanlayer/` for use across all workspaces
 - New configuration option `humanlayer.installLocation` to choose between workspace and user-level installation
 - Support for installing commands without requiring an open workspace (when using user-level installation)
+- Auto-caching of latest version for offline availability
 
 ### Changed
 - Installation messages now indicate whether commands were installed to workspace or user level
 - Gitignore management now only applies to workspace installations
+- Update and check-for-updates commands now work with user-level installations
+
+### Fixed
+- Fixed user-level installation path (was incorrectly creating nested `.claude/.claude` directory)
+- Fixed toggle and preview commands for user-level installations
 
 ## [0.1.0] - 2024-12-24
 

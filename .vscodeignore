@@ -12,3 +12,7 @@ tsconfig.json
 vitest.config.ts
 _docs/**
 .eslintrc.json
+*.vsix
+jest.config.js
+tsconfig.test.json
+coverage/

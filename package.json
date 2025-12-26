@@ -2,8 +2,8 @@
   "name": "humanlayer-command-syncer",
   "displayName": "HumanLayer Command Syncer",
   "description": "Automatically fetch, install, and update HumanLayer Claude Code command packs from GitHub (for Claude Code users on Windows)",
-  "version": "0.1.0",
-  "publisher": "humanlayer",
+  "version": "0.2.0",
+  "publisher": "daedalus-apps",
   "license": "MIT",
   "icon": "icon.png",
   "repository": {

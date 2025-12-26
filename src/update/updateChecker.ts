@@ -68,8 +68,8 @@ export class UpdateChecker {
 
             this.showStatusBarItem(updateInfo);
             return updateInfo;
-        } catch (error) {
-            console.error('Failed to check for updates:', error);
+        } catch {
+            // Silently fail - update checks are non-critical
             return null;
         }
     }

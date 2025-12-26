@@ -1,32 +1,44 @@
 # HumanLayer Command Syncer
 
+[![Version](https://img.shields.io/visual-studio-marketplace/v/daedalus-apps.humanlayer-command-syncer)](https://marketplace.visualstudio.com/items?itemName=daedalus-apps.humanlayer-command-syncer)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/daedalus-apps.humanlayer-command-syncer)](https://marketplace.visualstudio.com/items?itemName=daedalus-apps.humanlayer-command-syncer)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> **Sync HumanLayer command packs for Claude Code with one click.**
+
 A VS Code extension that automatically fetches, installs, and updates HumanLayer's Claude Code command packs directly from the official HumanLayer repository.
 
-> **For Claude Code Users on Windows**: This extension is specifically designed for users running [Claude Code](https://claude.com/claude-code) (Anthropic's official CLI) within VS Code on Windows. It manages command packs for Claude Code's command system.
+![HumanLayer Command Browser](images/screenshot.png)
+
+> **For Claude Code Users**: This extension is designed for users running [Claude Code](https://claude.ai/code) (Anthropic's official CLI) within VS Code. It manages command packs for Claude Code's slash command system.
+
+---
 
 ## Features
 
-- **One-Click Install**: Fetch and install HumanLayer commands from GitHub with a single click
-- **Automatic Updates**: Get notified when new command versions are available
-- **Version Selection**: Pin to specific tags or use the latest release
-- **Profile Support**: Choose between minimal, full, or custom command sets
-- **Offline Mode**: Works offline using cached commands
-- **Multi-Root Support**: Install commands into each workspace folder
-- **Safe Updates**: Preview changes with VS Code's diff viewer before applying
-- **Git-Friendly**: Automatically adds installed commands to `.gitignore`
+| Feature | Description |
+|---------|-------------|
+| **One-Click Install** | Fetch and install HumanLayer commands from GitHub instantly |
+| **Automatic Updates** | Get notified when new command versions are available |
+| **Version Pinning** | Pin to specific tags or always use the latest release |
+| **Profile Support** | Choose between minimal, full, or custom command sets |
+| **Offline Mode** | Works offline using cached commands |
+| **User or Workspace** | Install globally (`~/.claude`) or per-project |
+| **Safe Updates** | Preview changes before applying |
+| **Git-Friendly** | Automatically adds commands to `.gitignore` |
 
-## Requirements
+---
 
-- **VS Code** on Windows
-- **[Claude Code](https://claude.com/claude-code)** - Anthropic's official CLI for Claude
-- Claude Code must be configured and working in your VS Code environment
+## Quick Start
 
-## Installation
+1. **Install** the extension from the VS Code Marketplace
+2. **Open** the HumanLayer panel in the sidebar (look for the HumanLayer icon)
+3. **Select** a version from the dropdown
+4. **Click** "Install"
 
-1. Open VS Code on Windows
-2. Go to Extensions (Ctrl+Shift+X)
-3. Search for "HumanLayer Command Syncer"
-4. Click Install
+That's it! Your commands are ready to use in Claude Code.
+
+---
 
 ## Usage
 
@@ -37,7 +49,7 @@ A VS Code extension that automatically fetches, installs, and updates HumanLayer
 3. Choose a profile (minimal/full/custom)
 4. Click "Install"
 
-Commands are installed to `.claude/commands/humanlayer/` in your workspace.
+Commands are installed to `.claude/commands/humanlayer/` in your workspace (or `~/.claude/commands/humanlayer/` for user-level installation).
 
 ### Updating Commands
 
@@ -51,14 +63,18 @@ Commands are installed to `.claude/commands/humanlayer/` in your workspace.
 2. Click the "Uninstall" button
 3. Confirm the removal when prompted
 
-This removes all HumanLayer commands from the current installation location (workspace or user level). The `.claude/commands/` folder is preserved since it may contain other commands.
+The `.claude/commands/` folder is preserved since it may contain other commands.
 
 ### Command Palette
 
-- `HumanLayer: Install Commands` - Install or reinstall commands
-- `HumanLayer: Update Commands` - Check and apply updates
-- `HumanLayer: Open Command Browser` - Open the HumanLayer panel
-- `HumanLayer: Check for Updates` - Manually check for updates
+| Command | Description |
+|---------|-------------|
+| `HumanLayer: Install Commands` | Install or reinstall commands |
+| `HumanLayer: Update Commands` | Check and apply updates |
+| `HumanLayer: Open Command Browser` | Open the HumanLayer panel |
+| `HumanLayer: Check for Updates` | Manually check for updates |
+
+---
 
 ## Configuration
 
@@ -66,52 +82,59 @@ This removes all HumanLayer commands from the current installation location (wor
 |---------|---------|-------------|
 | `humanlayer.autoUpdate` | `false` | Automatically check for updates on startup |
 | `humanlayer.defaultProfile` | `"full"` | Default profile (minimal/full/custom) |
-| `humanlayer.autoAddGitignore` | `true` | Add installed commands to .gitignore (workspace only) |
+| `humanlayer.autoAddGitignore` | `true` | Add installed commands to .gitignore |
 | `humanlayer.defaultTag` | `"latest"` | Default version tag |
-| `humanlayer.installLocation` | `"workspace"` | Install location: `"workspace"` (project-specific) or `"user"` (global) |
+| `humanlayer.installLocation` | `"workspace"` | Where to install: `"workspace"` or `"user"` |
 
 ### Installation Locations
 
-**Workspace Installation** (default)
-- Commands installed to `.claude/commands/humanlayer/` in your project
-- Different commands per workspace
-- Perfect for project-specific commands
-- Automatically added to `.gitignore`
+| Location | Path | Best For |
+|----------|------|----------|
+| **Workspace** (default) | `.claude/commands/humanlayer/` | Project-specific commands |
+| **User** (global) | `~/.claude/commands/humanlayer/` | Commands used everywhere |
 
-**User Installation** (global)
-- Commands installed to `~/.claude/commands/humanlayer/`
-- Available in all workspaces
-- Perfect for commands you use everywhere
-- No workspace required
+The panel shows a banner indicating where commands are installed.
 
-The panel shows a banner indicating where commands are installed (Workspace or User level).
+---
 
 ## How It Works
 
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────────┐
+│  GitHub Repo    │────▶│   Validate   │────▶│  Install to     │
+│  (HumanLayer)   │     │   (YAML)     │     │  .claude/       │
+└─────────────────┘     └──────────────┘     └─────────────────┘
+                                                     │
+                                                     ▼
+                                            ┌─────────────────┐
+                                            │  Create lockfile│
+                                            │  + .gitignore   │
+                                            └─────────────────┘
+```
+
 1. **Fetches** command packs from the HumanLayer GitHub repository
 2. **Validates** YAML syntax and schema
-3. **Installs** commands to your chosen location (workspace or user level)
+3. **Installs** commands to your chosen location
 4. **Creates** a lockfile for reproducible installs
-5. **Updates** `.gitignore` (for workspace installations only)
+5. **Updates** `.gitignore` (workspace installations only)
+
+---
 
 ## File Structure
 
 ### Workspace Installation
 
-After installation, your workspace will have:
-
 ```
-.claude/
-└── commands/
-    └── humanlayer/
-        ├── command1.md
-        ├── command2.yaml
-        └── humanlayer.lock.json
+your-project/
+└── .claude/
+    └── commands/
+        └── humanlayer/
+            ├── command1.md
+            ├── command2.yaml
+            └── humanlayer.lock.json
 ```
 
 ### User Installation
-
-Commands are installed globally to:
 
 ```
 ~/.claude/
@@ -122,28 +145,31 @@ Commands are installed globally to:
         └── humanlayer.lock.json
 ```
 
+---
+
 ## Offline Mode
 
-When GitHub is unavailable, the extension uses cached commands. A warning is shown, and you can:
-- Retry the connection
-- Use cached version
-- Cancel the operation
+When GitHub is unavailable, the extension automatically:
+- Uses cached commands from the last successful fetch
+- Shows only versions that are cached locally
+- Displays an offline indicator in the panel
+
+---
 
 ## Requirements
 
 - VS Code 1.85.0 or higher
 - Internet connection (for initial install and updates)
 
+---
+
 ## Development
-
-### Prerequisites
-
-- Node.js (v18 or later)
-- VS Code 1.85.0 or higher
 
 ### Setup
 
 ```bash
+git clone https://github.com/franciszver/claude-humanlayer-extension
+cd claude-humanlayer-extension
 npm install
 npm run compile
 ```
@@ -154,40 +180,32 @@ npm run compile
 2. Press **F5** to launch the Extension Development Host
 3. The extension will be active in the new VS Code window
 
-Two debug configurations are available:
-- **Run Extension** - Compiles first, then launches
-- **Run Extension (No Build)** - Skips compilation (use with `npm run watch`)
-
-### Watch Mode
-
-For development with automatic recompilation:
-
-```bash
-npm run watch
-```
-
-Then press **F5** to launch. Use **Ctrl+Shift+F5** to restart after changes.
-
-### Available Scripts
+### Scripts
 
 | Script | Description |
 |--------|-------------|
-| `npm run compile` | Compile TypeScript to JavaScript |
+| `npm run compile` | Compile TypeScript |
 | `npm run watch` | Watch mode for development |
 | `npm run test` | Run unit tests |
-| `npm run test:watch` | Run tests in watch mode |
 | `npm run lint` | Run ESLint |
 | `npm run package` | Create .vsix package |
+
+---
 
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request on [GitHub](https://github.com/franciszver/claude-humanlayer-extension).
 
+---
+
 ## License
 
 MIT
 
+---
+
 ## Links
 
-- [HumanLayer Command Packs Repository](https://github.com/humanlayer/humanlayer)
+- [HumanLayer Command Packs](https://github.com/humanlayer/humanlayer)
 - [Report Issues](https://github.com/franciszver/claude-humanlayer-extension/issues)
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=daedalus-apps.humanlayer-command-syncer)
