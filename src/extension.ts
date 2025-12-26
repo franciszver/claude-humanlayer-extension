@@ -179,12 +179,6 @@ async function updateCommands(
     lockfile: LockfileManager,
     cache: CacheManager
 ): Promise<void> {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders) {
-        vscode.window.showErrorMessage('No workspace folder open.');
-        return;
-    }
-
     try {
         await vscode.window.withProgress(
             {
@@ -193,53 +187,38 @@ async function updateCommands(
                 cancellable: false
             },
             async (progress) => {
-                for (const folder of workspaceFolders) {
-                    const currentLockfile = await lockfile.read(folder.uri);
-                    if (!currentLockfile) {
-                        vscode.window.showWarningMessage(
-                            `No HumanLayer commands installed in ${folder.name}. Use 'Install Commands' first.`
-                        );
-                        continue;
-                    }
+                // Check workspace-level first
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                let foundLockfile = false;
 
-                    progress.report({ message: `Checking updates for ${folder.name}...` });
-
-                    // Get latest tag
-                    const tags = await fetcher.fetchTags();
-                    const latestTag = tags[0]?.name;
-
-                    if (!latestTag || latestTag === currentLockfile.tag) {
-                        vscode.window.showInformationMessage(
-                            `${folder.name} is already up to date (${currentLockfile.tag})`
-                        );
-                        continue;
-                    }
-
-                    // Fetch and validate new commands
-                    progress.report({ message: `Fetching ${latestTag}...` });
-                    const commands = await fetcher.fetchCommands(latestTag);
-
-                    const validationResults = validator.validateCommands(commands);
-                    if (validationResults.errors.length > 0) {
-                        const proceed = await vscode.window.showWarningMessage(
-                            `Found ${validationResults.errors.length} validation error(s). Update anyway?`,
-                            'Yes',
-                            'No'
-                        );
-                        if (proceed !== 'Yes') {
-                            continue;
+                if (workspaceFolders) {
+                    for (const folder of workspaceFolders) {
+                        const currentLockfile = await lockfile.read(folder.uri);
+                        if (currentLockfile) {
+                            foundLockfile = true;
+                            await performUpdate(
+                                fetcher, validator, installer, cache, progress,
+                                currentLockfile, folder.uri, folder.name, currentLockfile.location || 'workspace'
+                            );
                         }
                     }
+                }
 
-                    // Install updates
-                    progress.report({ message: `Updating ${folder.name}...` });
-                    await installer.install(folder.uri, commands, latestTag, currentLockfile.profile);
+                // Check user-level if no workspace lockfile found
+                if (!foundLockfile) {
+                    const userLockfile = await lockfile.readUserLevel();
+                    if (userLockfile) {
+                        foundLockfile = true;
+                        await performUpdate(
+                            fetcher, validator, installer, cache, progress,
+                            userLockfile, undefined, 'user level', 'user'
+                        );
+                    }
+                }
 
-                    // Update cache
-                    await cache.cacheCommands(latestTag, commands);
-
-                    vscode.window.showInformationMessage(
-                        `Updated ${folder.name} from ${currentLockfile.tag} to ${latestTag}`
+                if (!foundLockfile) {
+                    vscode.window.showWarningMessage(
+                        'No HumanLayer commands installed. Use "Install Commands" first.'
                     );
                 }
             }
@@ -251,15 +230,62 @@ async function updateCommands(
     }
 }
 
+async function performUpdate(
+    fetcher: GitHubFetcher,
+    validator: YamlValidator,
+    installer: CommandInstaller,
+    cache: CacheManager,
+    progress: vscode.Progress<{ message?: string }>,
+    currentLockfile: { tag: string; profile: string },
+    workspaceUri: vscode.Uri | undefined,
+    displayName: string,
+    location: 'workspace' | 'user'
+): Promise<void> {
+    progress.report({ message: `Checking updates for ${displayName}...` });
+
+    // Get latest tag
+    const tags = await fetcher.fetchTags();
+    const latestTag = tags[0]?.name;
+
+    if (!latestTag || latestTag === currentLockfile.tag) {
+        vscode.window.showInformationMessage(
+            `${displayName} is already up to date (${currentLockfile.tag})`
+        );
+        return;
+    }
+
+    // Fetch and validate new commands
+    progress.report({ message: `Fetching ${latestTag}...` });
+    const commands = await fetcher.fetchCommands(latestTag);
+
+    const validationResults = validator.validateCommands(commands);
+    if (validationResults.errors.length > 0) {
+        const proceed = await vscode.window.showWarningMessage(
+            `Found ${validationResults.errors.length} validation error(s). Update anyway?`,
+            'Yes',
+            'No'
+        );
+        if (proceed !== 'Yes') {
+            return;
+        }
+    }
+
+    // Install updates
+    progress.report({ message: `Updating ${displayName}...` });
+    await installer.install(workspaceUri, commands, latestTag, currentLockfile.profile, location);
+
+    // Update cache
+    await cache.cacheCommands(latestTag, commands);
+
+    vscode.window.showInformationMessage(
+        `Updated ${displayName} from ${currentLockfile.tag} to ${latestTag}`
+    );
+}
+
 async function checkForUpdates(
     fetcher: GitHubFetcher,
     lockfile: LockfileManager
 ): Promise<void> {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders) {
-        return;
-    }
-
     try {
         const tags = await fetcher.fetchTags();
         const latestTag = tags[0]?.name;
@@ -268,19 +294,37 @@ async function checkForUpdates(
             return;
         }
 
-        for (const folder of workspaceFolders) {
-            const currentLockfile = await lockfile.read(folder.uri);
-            if (currentLockfile && currentLockfile.tag !== latestTag) {
-                const update = await vscode.window.showInformationMessage(
-                    `HumanLayer update available: ${currentLockfile.tag} → ${latestTag}`,
-                    'Update Now',
-                    'Later'
-                );
+        // Check workspace-level first
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders) {
+            for (const folder of workspaceFolders) {
+                const currentLockfile = await lockfile.read(folder.uri);
+                if (currentLockfile && currentLockfile.tag !== latestTag) {
+                    const update = await vscode.window.showInformationMessage(
+                        `HumanLayer update available: ${currentLockfile.tag} → ${latestTag}`,
+                        'Update Now',
+                        'Later'
+                    );
 
-                if (update === 'Update Now') {
-                    vscode.commands.executeCommand('humanlayer.update');
+                    if (update === 'Update Now') {
+                        vscode.commands.executeCommand('humanlayer.update');
+                    }
+                    return; // Only show one notification
                 }
-                break; // Only show one notification
+            }
+        }
+
+        // Check user-level
+        const userLockfile = await lockfile.readUserLevel();
+        if (userLockfile && userLockfile.tag !== latestTag) {
+            const update = await vscode.window.showInformationMessage(
+                `HumanLayer update available (user level): ${userLockfile.tag} → ${latestTag}`,
+                'Update Now',
+                'Later'
+            );
+
+            if (update === 'Update Now') {
+                vscode.commands.executeCommand('humanlayer.update');
             }
         }
     } catch (error) {

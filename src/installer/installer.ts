@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as os from 'os';
-import * as path from 'path';
 import type { CommandFile } from '../github/types';
 import type { InstallResult } from './types';
 import { LockfileManager } from '../lockfile';
@@ -19,15 +18,14 @@ export class CommandInstaller {
         this.lockfileManager = lockfileManager;
     }
 
-    private getUserLevelUri(): vscode.Uri {
-        const homeDir = os.homedir();
-        const claudeDir = path.join(homeDir, '.claude');
-        return vscode.Uri.file(claudeDir);
+    private getUserHomeUri(): vscode.Uri {
+        return vscode.Uri.file(os.homedir());
     }
 
     private getInstallUri(workspaceUri: vscode.Uri | undefined, location: InstallLocation): vscode.Uri {
         if (location === 'user') {
-            return this.getUserLevelUri();
+            // Return home directory - paths like .claude/commands will be joined to it
+            return this.getUserHomeUri();
         }
         if (!workspaceUri) {
             throw new Error('Workspace URI required for workspace installation');

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
 import { GitHubFetcher } from '../github';
 import { YamlValidator } from '../validator';
 import { CommandInstaller } from '../installer';
@@ -16,6 +17,7 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
     private readonly _installer: CommandInstaller;
     private readonly _lockfile: LockfileManager;
     private readonly _cache: CacheManager;
+    private _currentInstallLocation: 'workspace' | 'user' | null = null;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -84,6 +86,10 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
                 await this._updateCommands();
                 break;
 
+            case 'uninstall':
+                await this._uninstallCommands();
+                break;
+
             case 'toggleCommand':
                 await this._toggleCommand(message.name, message.enabled);
                 break;
@@ -123,12 +129,15 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
             let installedCommands: CommandInfo[] = [];
             let currentTag = '';
             let currentProfile = 'full';
+            let installLocation: 'workspace' | 'user' | null = null;
 
+            // Check workspace-level lockfile first
             if (workspaceFolder) {
                 const lockfile = await this._lockfile.read(workspaceFolder.uri);
                 if (lockfile) {
                     currentTag = lockfile.tag;
                     currentProfile = lockfile.profile;
+                    installLocation = lockfile.location || 'workspace';
 
                     installedCommands = lockfile.commands.map(cmd => ({
                         name: cmd.name,
@@ -141,13 +150,36 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
                 }
             }
 
+            // If no workspace lockfile, check user-level lockfile
+            if (installedCommands.length === 0) {
+                const userLockfile = await this._lockfile.readUserLevel();
+                if (userLockfile) {
+                    currentTag = userLockfile.tag;
+                    currentProfile = userLockfile.profile;
+                    installLocation = 'user';
+
+                    installedCommands = userLockfile.commands.map(cmd => ({
+                        name: cmd.name,
+                        path: cmd.path,
+                        installed: true,
+                        enabled: !cmd.disabled,
+                        modified: cmd.userModified || false,
+                        hasUpdate: false
+                    }));
+                }
+            }
+
+            // Store current install location for use in toggle/preview
+            this._currentInstallLocation = installLocation;
+
             const state: Partial<PanelState> = {
                 tags: tags.map(t => t.name),
                 selectedTag: currentTag || tags[0]?.name || '',
                 profile: currentProfile,
                 commands: installedCommands,
                 isLoading: false,
-                isOffline: !isOnline
+                isOffline: !isOnline,
+                installLocation
             };
 
             this._sendMessage({ type: 'setState', state });
@@ -177,9 +209,14 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
         try {
             const commands = await this._fetcher.fetchCommands(tag);
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-            const lockfile = workspaceFolder
+
+            // Check workspace lockfile first, then user-level
+            let lockfile = workspaceFolder
                 ? await this._lockfile.read(workspaceFolder.uri)
                 : null;
+            if (!lockfile) {
+                lockfile = await this._lockfile.readUserLevel();
+            }
 
             const commandInfos: CommandInfo[] = commands.map(cmd => {
                 const lockedCmd = lockfile?.commands.find(c => c.name === cmd.name);
@@ -209,11 +246,15 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
     }
 
     private async _installCommands(tag: string, profile: string): Promise<void> {
+        const config = vscode.workspace.getConfiguration('humanlayer');
+        const installLocation = config.get<'workspace' | 'user'>('installLocation', 'workspace');
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) {
+
+        // Check workspace requirement for workspace-level installation
+        if (installLocation === 'workspace' && !workspaceFolder) {
             this._sendMessage({
                 type: 'showError',
-                message: 'No workspace folder open'
+                message: 'No workspace folder open. Open a folder or change installation location to "user" in settings.'
             });
             return;
         }
@@ -237,10 +278,11 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
             }
 
             const result = await this._installer.install(
-                workspaceFolder.uri,
+                installLocation === 'user' ? undefined : workspaceFolder?.uri,
                 commands,
                 tag,
-                profile
+                profile,
+                installLocation
             );
 
             if (result.success) {
@@ -267,15 +309,47 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
         vscode.commands.executeCommand('humanlayer.update');
     }
 
-    private async _toggleCommand(name: string, enabled: boolean): Promise<void> {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) {
+    private async _uninstallCommands(): Promise<void> {
+        const location = this._currentInstallLocation;
+        if (!location) {
+            this._sendMessage({ type: 'showError', message: 'No commands installed' });
+            return;
+        }
+
+        const confirm = await vscode.window.showWarningMessage(
+            `Remove all HumanLayer commands from ${location === 'user' ? 'user level (~/.claude)' : 'workspace'}?`,
+            { modal: true },
+            'Remove'
+        );
+
+        if (confirm !== 'Remove') {
             return;
         }
 
         try {
-            await this._installer.toggleCommand(workspaceFolder.uri, name, enabled);
-            await this._lockfile.markAsDisabled(workspaceFolder.uri, name, !enabled);
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            await this._installer.uninstall(workspaceFolder?.uri, location);
+            this._sendMessage({ type: 'showSuccess', message: 'Commands removed successfully' });
+            await this._refresh();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Uninstall failed';
+            this._sendMessage({ type: 'showError', message });
+        }
+    }
+
+    private async _toggleCommand(name: string, enabled: boolean): Promise<void> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const location = this._currentInstallLocation || 'workspace';
+
+        try {
+            await this._installer.toggleCommand(workspaceFolder?.uri, name, enabled, location);
+            // Update lockfile at correct location
+            if (location === 'user') {
+                const homeUri = this._getUserHomeUri();
+                await this._lockfile.markAsDisabled(homeUri, name, !enabled);
+            } else if (workspaceFolder) {
+                await this._lockfile.markAsDisabled(workspaceFolder.uri, name, !enabled);
+            }
             await this._refresh();
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Toggle failed';
@@ -283,9 +357,21 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    private _getUserHomeUri(): vscode.Uri {
+        return vscode.Uri.file(os.homedir());
+    }
+
     private async _previewCommand(name: string): Promise<void> {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) {
+        const location = this._currentInstallLocation || 'workspace';
+
+        // Determine base URI based on install location
+        let baseUri: vscode.Uri;
+        if (location === 'user') {
+            baseUri = this._getUserHomeUri();
+        } else if (workspaceFolder) {
+            baseUri = workspaceFolder.uri;
+        } else {
             return;
         }
 
@@ -293,7 +379,7 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
 
         for (const ext of extensions) {
             const commandPath = vscode.Uri.joinPath(
-                workspaceFolder.uri,
+                baseUri,
                 '.claude/commands/humanlayer',
                 `${name}${ext}`
             );
@@ -540,11 +626,33 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
         .hidden {
             display: none !important;
         }
+
+        .install-location-banner {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 10px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            background: var(--vscode-editorWidget-background);
+            border: 1px solid var(--vscode-editorWidget-border);
+        }
+
+        .install-location-banner.user-level {
+            background: var(--vscode-inputValidation-infoBackground);
+            border-color: var(--vscode-inputValidation-infoBorder);
+        }
+
+        .install-location-icon {
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div id="status" class="status hidden"></div>
+        <div id="installLocationBanner" class="install-location-banner hidden"></div>
 
         <div class="header">
             <div>
@@ -572,6 +680,9 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
                 <button id="installBtn" style="flex: 1;">Install</button>
                 <button id="updateBtn" class="secondary">Update</button>
             </div>
+            <div class="row">
+                <button id="uninstallBtn" class="secondary" style="flex: 1;">Uninstall</button>
+            </div>
         </div>
 
         <div id="loading" class="loading hidden">
@@ -596,7 +707,8 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
                 profile: 'full',
                 commands: [],
                 isLoading: false,
-                isOffline: false
+                isOffline: false,
+                installLocation: null
             };
 
             // Elements
@@ -604,11 +716,13 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
             const profileSelect = document.getElementById('profileSelect');
             const installBtn = document.getElementById('installBtn');
             const updateBtn = document.getElementById('updateBtn');
+            const uninstallBtn = document.getElementById('uninstallBtn');
             const refreshBtn = document.getElementById('refreshBtn');
             const commandList = document.getElementById('commandList');
             const loading = document.getElementById('loading');
             const emptyState = document.getElementById('emptyState');
             const statusEl = document.getElementById('status');
+            const installLocationBanner = document.getElementById('installLocationBanner');
 
             // Event listeners
             tagSelect.addEventListener('change', () => {
@@ -630,6 +744,10 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
 
             updateBtn.addEventListener('click', () => {
                 vscode.postMessage({ type: 'update' });
+            });
+
+            uninstallBtn.addEventListener('click', () => {
+                vscode.postMessage({ type: 'uninstall' });
             });
 
             refreshBtn.addEventListener('click', () => {
@@ -678,6 +796,17 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
                 // Offline indicator
                 if (state.isOffline) {
                     showStatus('Offline mode - using cached data', 'offline');
+                }
+
+                // Install location banner
+                if (state.installLocation === 'user' && state.commands.length > 0) {
+                    installLocationBanner.innerHTML = '<span class="install-location-icon">~</span> Commands installed at user level (~/.claude)';
+                    installLocationBanner.className = 'install-location-banner user-level';
+                } else if (state.installLocation === 'workspace' && state.commands.length > 0) {
+                    installLocationBanner.innerHTML = '<span class="install-location-icon">.</span> Commands installed in workspace';
+                    installLocationBanner.className = 'install-location-banner';
+                } else {
+                    installLocationBanner.className = 'install-location-banner hidden';
                 }
 
                 // Tags dropdown
@@ -742,8 +871,10 @@ export class CommandBrowserProvider implements vscode.WebviewViewProvider {
                 }
 
                 // Button states
+                const hasInstalledCommands = state.commands.filter(c => c.installed).length > 0;
                 installBtn.disabled = !state.selectedTag || state.isLoading;
-                updateBtn.disabled = state.commands.filter(c => c.installed).length === 0 || state.isLoading;
+                updateBtn.disabled = !hasInstalledCommands || state.isLoading;
+                uninstallBtn.disabled = !hasInstalledCommands || state.isLoading;
             }
 
             // Initial render

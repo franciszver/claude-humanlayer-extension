@@ -45,6 +45,14 @@ Commands are installed to `.claude/commands/humanlayer/` in your workspace.
 2. When an update is available, a notification appears
 3. Click "Update" to preview and apply changes
 
+### Removing Commands
+
+1. Open the HumanLayer panel in the sidebar
+2. Click the "Uninstall" button
+3. Confirm the removal when prompted
+
+This removes all HumanLayer commands from the current installation location (workspace or user level). The `.claude/commands/` folder is preserved since it may contain other commands.
+
 ### Command Palette
 
 - `HumanLayer: Install Commands` - Install or reinstall commands
@@ -75,6 +83,8 @@ Commands are installed to `.claude/commands/humanlayer/` in your workspace.
 - Available in all workspaces
 - Perfect for commands you use everywhere
 - No workspace required
+
+The panel shows a banner indicating where commands are installed (Workspace or User level).
 
 ## How It Works
 

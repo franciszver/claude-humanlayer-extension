@@ -1,9 +1,27 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
 import type { Lockfile, LockfileCommand } from './types';
 
 const LOCKFILE_PATH = '.claude/commands/humanlayer.lock.json';
 
 export class LockfileManager {
+    private getUserHomeUri(): vscode.Uri {
+        return vscode.Uri.file(os.homedir());
+    }
+
+    async readUserLevel(): Promise<Lockfile | null> {
+        const homeUri = this.getUserHomeUri();
+        const lockfilePath = vscode.Uri.joinPath(homeUri, LOCKFILE_PATH);
+
+        try {
+            const bytes = await vscode.workspace.fs.readFile(lockfilePath);
+            const content = Buffer.from(bytes).toString('utf-8');
+            return JSON.parse(content) as Lockfile;
+        } catch {
+            return null;
+        }
+    }
+
     async read(workspaceUri: vscode.Uri): Promise<Lockfile | null> {
         const lockfilePath = vscode.Uri.joinPath(workspaceUri, LOCKFILE_PATH);
 

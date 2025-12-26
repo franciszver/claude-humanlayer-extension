@@ -21,6 +21,7 @@ export interface PanelState {
     isLoading: boolean;
     isOffline: boolean;
     error?: string;
+    installLocation?: 'workspace' | 'user' | null;
 }
 
 // Messages from webview to extension
@@ -30,6 +31,7 @@ export type WebviewToExtensionMessage =
     | { type: 'fetchCommands'; tag: string }
     | { type: 'install'; tag: string; profile: string }
     | { type: 'update' }
+    | { type: 'uninstall' }
     | { type: 'toggleCommand'; name: string; enabled: boolean }
     | { type: 'previewCommand'; name: string }
     | { type: 'refresh' }
